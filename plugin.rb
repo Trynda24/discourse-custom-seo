@@ -4,7 +4,6 @@
 # authors: Your Name
 # url: https://github.com/Trynda24/discourse-custom-seo
 
-register_asset "stylesheets/custom-seo.scss"
 
 after_initialize do
   # Register custom topic fields for storage
