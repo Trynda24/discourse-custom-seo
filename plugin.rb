@@ -26,28 +26,51 @@ after_initialize do
   end
 
   # Make these fields available when loading topics
-  TopicView.default_post_custom_fields << "custom_meta_title"
-  TopicView.default_post_custom_fields << "custom_meta_description"
-  TopicView.default_post_custom_fields << "custom_meta_keywords"
-
+  # This is a correction - should be at topic level
+  Topic.preload_custom_fields(['custom_meta_title', 'custom_meta_description', 'custom_meta_keywords'])
+  
   # Set up the controller for API endpoints
-  add_api_endpoint "/discourse-custom-seo/update-meta" do |request|
-    topic_id = request.params[:topic_id]
-    topic = Topic.find_by(id: topic_id)
+  # Proper API endpoint setup
+  plugin = self
+  Discourse::Application.routes.append do
+    mount ::DiscourseCustomSeo::Engine, at: '/discourse-custom-seo'
+  end
+
+  module ::DiscourseCustomSeo
+    class Engine < ::Rails::Engine
+      engine_name "discourse_custom_seo"
+      isolate_namespace DiscourseCustomSeo
+    end
+  end
+
+  class ::DiscourseCustomSeo::CustomSeoController < ::ApplicationController
+    requires_plugin 'discourse-custom-seo'
     
-    if !topic
-      { error: "Topic not found" }
-    elsif !guardian.can_edit?(topic)
-      { error: "You don't have permission to edit this topic" }
-    else
+    def update_meta
+      topic_id = params[:topic_id]
+      topic = Topic.find_by(id: topic_id)
+      
+      if !topic
+        render json: { error: "Topic not found" }, status: 404
+        return
+      end
+      
+      guardian.ensure_can_edit!(topic)
+      
       # Update the custom fields
-      topic.custom_fields['custom_meta_title'] = request.params[:custom_title]
-      topic.custom_fields['custom_meta_description'] = request.params[:custom_description]
-      topic.custom_fields['custom_meta_keywords'] = request.params[:custom_keywords]
+      topic.custom_fields['custom_meta_title'] = params[:custom_title]
+      topic.custom_fields['custom_meta_description'] = params[:custom_description]
+      topic.custom_fields['custom_meta_keywords'] = params[:custom_keywords]
       topic.save_custom_fields(true)
       
-      { success: true }
+      render json: { success: true }
+    rescue Discourse::InvalidAccess
+      render json: { error: "You don't have permission to edit this topic" }, status: 403
     end
+  end
+
+  DiscourseCustomSeo::Engine.routes.draw do
+    post "/update-meta" => "custom_seo#update_meta"
   end
   
   # Override the application helper to use custom meta data
