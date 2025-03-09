@@ -25,12 +25,13 @@ after_initialize do
     object.topic.custom_fields['custom_meta_keywords']
   end
 
-  # Make these fields available when loading topics
-  # This is a correction - should be at topic level
-  Topic.preload_custom_fields(['custom_meta_title', 'custom_meta_description', 'custom_meta_keywords'])
+  # Make these fields available when loading topics - corrected approach
+  # Add fields to topic view preloading
+  on(:topic_view_init) do |topic_view|
+    topic_view.topic.preload_custom_fields(['custom_meta_title', 'custom_meta_description', 'custom_meta_keywords'])
+  end
   
   # Set up the controller for API endpoints
-  # Proper API endpoint setup
   plugin = self
   Discourse::Application.routes.append do
     mount ::DiscourseCustomSeo::Engine, at: '/discourse-custom-seo'
