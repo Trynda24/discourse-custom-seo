@@ -1,0 +1,4 @@
+plugins:
+  custom_seo_enabled:
+    default: true
+    client: true
