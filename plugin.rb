@@ -13,80 +13,62 @@ after_initialize do
   Topic.register_custom_field_type('custom_meta_keywords', :string)
   
   # Add fields to topic view serializer
-  add_to_serializer(:topic_view, :custom_meta_title) do
-    object.topic.custom_fields['custom_meta_title']
-  end
-  
-  add_to_serializer(:topic_view, :custom_meta_description) do
-    object.topic.custom_fields['custom_meta_description']
-  end
-  
-  add_to_serializer(:topic_view, :custom_meta_keywords) do
-    object.topic.custom_fields['custom_meta_keywords']
-  end
+  add_to_serializer(:topic_view, :custom_meta_title) { object.topic.custom_fields['custom_meta_title'] }
+  add_to_serializer(:topic_view, :custom_meta_description) { object.topic.custom_fields['custom_meta_description'] }
+  add_to_serializer(:topic_view, :custom_meta_keywords) { object.topic.custom_fields['custom_meta_keywords'] }
 
-  # Make these fields available when loading topics - corrected approach
-  # Add fields to topic view preloading
-  on(:topic_view_init) do |topic_view|
-    topic_view.topic.preload_custom_fields(['custom_meta_title', 'custom_meta_description', 'custom_meta_keywords'])
-  end
-  
-  # Set up the controller for API endpoints
-  plugin = self
+  # Ensure fields are available when loading topics
+  TopicView.default_post_custom_fields += %w[custom_meta_title custom_meta_description custom_meta_keywords]
+
+  # Define API route correctly
   Discourse::Application.routes.append do
-    mount ::DiscourseCustomSeo::Engine, at: '/discourse-custom-seo'
+    put "/discourse-custom-seo/update-meta" => "discourse_custom_seo#update_meta"
   end
 
+  # Create a custom controller for API
   module ::DiscourseCustomSeo
-    class Engine < ::Rails::Engine
-      engine_name "discourse_custom_seo"
-      isolate_namespace DiscourseCustomSeo
-    end
-  end
+    class SeoController < ::ApplicationController
+      requires_plugin "discourse-custom-seo"
 
-  class ::DiscourseCustomSeo::CustomSeoController < ::ApplicationController
-    requires_plugin 'discourse-custom-seo'
-    
-    def update_meta
-      topic_id = params[:topic_id]
-      topic = Topic.find_by(id: topic_id)
-      
-      if !topic
-        render json: { error: "Topic not found" }, status: 404
-        return
+      before_action :ensure_logged_in
+
+      def update_meta
+        topic = Topic.find_by(id: params[:topic_id])
+        guardian = Guardian.new(current_user)
+
+        if !topic
+          render json: { error: "Topic not found" }, status: 404
+        elsif !guardian.can_edit?(topic)
+          render json: { error: "You don't have permission to edit this topic" }, status: 403
+        else
+          topic.custom_fields['custom_meta_title'] = params[:custom_title]
+          topic.custom_fields['custom_meta_description'] = params[:custom_description]
+          topic.custom_fields['custom_meta_keywords'] = params[:custom_keywords]
+          topic.save_custom_fields(true)
+          render json: { success: true }
+        end
       end
-      
-      guardian.ensure_can_edit!(topic)
-      
-      # Update the custom fields
-      topic.custom_fields['custom_meta_title'] = params[:custom_title]
-      topic.custom_fields['custom_meta_description'] = params[:custom_description]
-      topic.custom_fields['custom_meta_keywords'] = params[:custom_keywords]
-      topic.save_custom_fields(true)
-      
-      render json: { success: true }
-    rescue Discourse::InvalidAccess
-      render json: { error: "You don't have permission to edit this topic" }, status: 403
     end
   end
 
-  DiscourseCustomSeo::Engine.routes.draw do
-    post "/update-meta" => "custom_seo#update_meta"
-  end
-  
-  # Override the application helper to use custom meta data
-  ApplicationHelper.module_eval do
+  # Register the controller
+  register_post_custom_field_type("custom_meta_title", :string)
+  register_post_custom_field_type("custom_meta_description", :string)
+  register_post_custom_field_type("custom_meta_keywords", :string)
+
+  # Override meta tags properly
+  module ::DiscourseCustomSeo::MetaDataOverride
     def crawlable_meta_data(opts = nil)
       opts ||= {}
-      
       if @topic_view&.topic
         topic = @topic_view.topic
         opts[:title] = topic.custom_fields["custom_meta_title"].presence || opts[:title]
         opts[:description] = topic.custom_fields["custom_meta_description"].presence || opts[:description]
         opts[:keywords] = topic.custom_fields["custom_meta_keywords"].presence || opts[:keywords]
       end
-      
       super(opts)
     end
   end
+
+  ApplicationHelper.prepend(::DiscourseCustomSeo::MetaDataOverride)
 end
