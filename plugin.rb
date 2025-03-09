@@ -2,8 +2,9 @@
 # about: Customize meta tags for SEO
 # version: 0.1
 # authors: Your Name
-# url: https://github.com/Trynda24/discourse-custom-seo
+# url: https://github.com/yourusername/discourse-custom-seo
 
+enabled_site_setting :custom_seo_enabled
 
 after_initialize do
   # Register custom topic fields for storage
@@ -12,15 +13,15 @@ after_initialize do
   Topic.register_custom_field_type('custom_meta_keywords', :string)
   
   # Add the fields to the preloaded topic custom fields
-  TopicView.add_to_serializer(:topic_view, :custom_meta_title) do
+  add_to_serializer(:topic_view, :custom_meta_title) do
     object.topic.custom_fields['custom_meta_title']
   end
   
-  TopicView.add_to_serializer(:topic_view, :custom_meta_description) do
+  add_to_serializer(:topic_view, :custom_meta_description) do
     object.topic.custom_fields['custom_meta_description']
   end
   
-  TopicView.add_to_serializer(:topic_view, :custom_meta_keywords) do
+  add_to_serializer(:topic_view, :custom_meta_keywords) do
     object.topic.custom_fields['custom_meta_keywords']
   end
 
