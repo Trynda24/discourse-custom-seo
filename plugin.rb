@@ -1,4 +1,4 @@
-# name: Discourse-custom-seo
+# name: discourse-custom-seo
 # about: Customize meta tags for SEO
 # version: 0.1
 # authors: YesWeCan
